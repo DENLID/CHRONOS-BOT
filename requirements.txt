@@ -1,0 +1,4 @@
+disnake
+pymongo
+requests
+discordlevelingcard
