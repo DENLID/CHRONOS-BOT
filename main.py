@@ -5,10 +5,11 @@ from pymongo import MongoClient
 import requests, io
 import config
 
-bot = commands.Bot(command_prefix="!", help_command=None, intents=disnake.Intents.all())
+bot = commands.Bot(command_prefix="!", help_command=None, intents=disnake.Intents.all())#, test_guilds=[1227337748650917929])
 
 cluster = MongoClient(config.mongo_api)
-users = cluster.DB.users
+users = cluster.db.users
+
 
 
 class Registration(disnake.ui.Modal):
@@ -40,6 +41,7 @@ class Registration(disnake.ui.Modal):
         await self.channel.send(embed=embed, view=AcceptView())
         await inter.response.send_message(f"Заявка на гражданство отправлена!", ephemeral=True)
 
+
 class AcceptView(disnake.ui.View):
     def __init__(self) -> None:
         super().__init__()
@@ -58,43 +60,70 @@ class AcceptView(disnake.ui.View):
         self.stop()
 
 
+
+
+
 @bot.event
 async def on_ready():
     print(f"Bot {bot.user} is ready to work!")
-    await bot.change_presence(status=disnake.Status.online, activity=disnake.Activity(name="卐AVE ROME卐"))
+    await bot.change_presence(status=disnake.Status.online, activity=disnake.Activity(name="AVE ROME"))
+
 
 @bot.event
 async def on_member_join(member):
-    channel_hi = bot.get_channel(1219712944003092521)
-    channel_bot = bot.get_channel(1220027360242434170)
-    role = member.guild.get_role(1219709622877814976)
-    user = await bot.fetch_user(member.id)
+    if users.find_one({"_id": member.id}) == None:
+        users.insert_one({"_id": member.id, "name": member.name, "balance": 0})
 
-    embed = disnake.Embed(
-        title=f"Добро пожаловать!",
-        description=f"Приветствую, {user.mention}! Что бы зарегистрироваться перейди на канал {channel_bot.mention} и напиши команду /register",
-        color=0xffffff
-    )
+@bot.event
+async def on_slash_command_error(ctx, error):
+    print(error)
 
-    await member.add_roles(role)
-    await channel_hi.send(embed=embed)
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("<:1984:1230918153190768722> У вас недостаточно прав для выполнения этой команды!", ephemeral=True)
+    elif isinstance(error, commands.UserInputError):
+        await ctx.send(embed=disnake.Embed(
+            description=f"Правильное использование команды `{ctx.prefix}{ctx.command.name} ({ctx.command.brief})\nExample: {ctx.prefix}{ctx.command.usage}`"
+        ), ephemeral=True)
+
 
 @bot.slash_command()
-async def register(inter):
+async def send_claims(inter):
     await inter.response.send_modal(modal=Registration())
 
+
+@bot.slash_command(description="Посмотреть баланс пользователя")
+async def balance(inter, member: disnake.Member):
+    user = users.find_one({"_id": member.id})
+    await inter.send(f"Баланс пользователя {member.name}: {user['balance']} BUGCOIN", ephemeral=True)
+
+
+@bot.slash_command(description="Прибавляет BUGCOIN пользователю")
+@commands.has_permissions(administrator=True)
+async def add_coin(inter, member: disnake.Member, coins: int):
+    if users.find_one({"_id": member.id}) != None:
+        users.update_one({"_id": member.id}, {"$inc":{"balance": coins}})
+        await inter.send(f"Пользовать {member.name} получил {coins} BUGCOIN", ephemeral=True)
+    else:
+        await inter.send(f"Пользовать {member.name} не найден в базе!", ephemeral=True)
+
+@bot.slash_command(description="Отнимает BUGCOIN пользователю")
+@commands.has_permissions(administrator=True)
+async def remove_coin(inter, member: disnake.Member, coins: int):
+    if users.find_one({"_id": member.id}) != None:
+        users.update_one({"_id": member.id}, {"$inc":{"balance": -coins}})
+        await inter.send(f"Пользовать {member.name} потерял {coins} BUGCOIN", ephemeral=True)
+    else:
+        await inter.send(f"Пользовать {member.name} не найден в базе!", ephemeral=True)
+
+
 @bot.slash_command()
-async def passport(inter, member: disnake.Member):
-    role = member.guild.get_role(886574077110784000)
+@commands.has_permissions(administrator=True)
+async def addgggggggg(inter):
+    guild = bot.get_guild(1227337748650917929)
 
-    name = member.name
-    mja = member.joined_at
-    birthdate = f"{mja.day}.{mja.month}.{mja.year}"
+    for member in guild.members:
+        if users.find_one({"_id": member.id}) == None:
+            users.insert_one({"_id": member.id, "name": member.name, "balance": 0})
 
-    await inter.send(file=disnake.File(fp='passport.png'), ephemeral=True)
-
-@bot.slash_command()
-async def pay(inter, member: disnake.Member):
-    pass
 
 bot.run(config.token)
